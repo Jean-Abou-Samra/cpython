@@ -9,6 +9,7 @@
 #  useful, thank small children who sleep at night.
 
 """Support to pretty-print lists, tuples, & dictionaries recursively.
+At the command line prompt, pretty-print an arbitrary object.
 
 Very simple, but useful, especially in debugging data structures.
 
@@ -34,7 +35,10 @@ saferepr()
 
 """
 
+import ast
 import collections as _collections
+import importlib
+import os
 import re
 import sys as _sys
 import types as _types
@@ -634,5 +638,105 @@ def _wrap_bytes_repr(object, width, allowance):
     if current:
         yield repr(current)
 
+def _usage():
+    cmd = os.path.basename(_sys.executable) + " -m pprint"
+    print(
+f"""usage: {cmd} <expression>      - pretty-print <expression>
+       {cmd} [-h | --help]     - show this help
+
+pprint - Pretty-print a Python object.
+Pass an expression to be pretty-printed. \
+Module names will be automatically imported.
+
+Examples include:
+{cmd}
+""")
+    exit()
+
+
+deb = []
+
+class _ArgumentResolver(ast.NodeTransformer):
+    def eval_ast(self, tree):
+        global deb
+        tree_fixed = ast.fix_missing_locations(tree)
+        deb.append(tree_fixed)
+        code = compile(tree_fixed, "<string>", mode="eval")
+        val = eval(code, {"import_module": importlib.import_module}, {})
+        return val
+
+    def make_call(self, module_name):
+        print(f"make_call {module_name=}")
+        return ast.Call(
+                ast.Name("import_module", ast.Load()),
+                [ast.Constant(module_name)],
+                []
+            )
+
+    def visit_Name(self, node):
+        print(f"visit_Name on {node=}, {node.id=}")
+        try:
+            eval(node.id, {}, {})
+        except NameError:
+            print("NameError catched")
+            c = self.make_call(node.id)
+            print(f"{type(c)=}")
+            return c
+        else:
+            return node
+
+    def visit_Attribute(self, node):
+        if isinstance(node.value, (ast.Name, ast.Attribute)):
+            print("isinstance(node.value, (ast.Name, ast.Attribute))")
+            visited = self.visit(node.value)
+            if isinstance(visited, ast.Call):
+                print("isinstance(visited, ast.Call)")
+                module = self.eval_ast(ast.Expression(visited))
+                if hasattr(module, node.attr):
+                    print("hasattr(module, node.attr)")
+                    return node
+                else:
+                    print("not hasattr(module, node.attr)")
+                    name, = visited.args
+                    return self.make_call(name + "." + node.attr)
+            else:
+                return node
+        else:
+            return node
+
+
+def visit_Attribute(self, node):
+	visited = self.visit(node.value)
+	if (
+	  isinstance(node.value, (ast.Name, ast.Attribute))
+	  and isinstance(visited, ast.Call)
+	  and not hasattr(self.eval_ast(ast.Expr??(visited)), node.attr)
+	  ):
+		name = visited.args[0].id
+		call = self.make_call(name + "." + node.attr)
+		try:
+			self.eval_ast(call)
+		except ImportError:
+			raise SystemExit(f"pprint: '{node.attr}' is neither an attribute nor a submodule of module '{name}'")
+		else:
+			return call
+	else:
+		node.value = visited
+		return node
+
+
+
+def cli():
+    global args, string, tree, resolver, obj
+    args = _sys.argv[1:]
+    if args in ([], ["-h"], ["--help"]):
+        _usage()
+    string = " ".join(args)
+    tree = ast.parse(string, mode="eval")
+    resolver = _ArgumentResolver()
+    obj = resolver.eval_ast(resolver.visit(tree))
+    pprint(obj)
+
+
 if __name__ == "__main__":
-    _perfcheck()
+    cli()
