@@ -9,6 +9,7 @@
 #  useful, thank small children who sleep at night.
 
 """Support to pretty-print lists, tuples, & dictionaries recursively.
+At the command line prompt, pretty-print an arbitrary object.
 
 Very simple, but useful, especially in debugging data structures.
 
@@ -34,7 +35,10 @@ saferepr()
 
 """
 
+import ast
 import collections as _collections
+import importlib
+import os
 import re
 import sys as _sys
 import types as _types
@@ -634,5 +638,90 @@ def _wrap_bytes_repr(object, width, allowance):
     if current:
         yield repr(current)
 
+def _usage():
+    cmd = os.path.basename(_sys.executable) + " -m pprint"
+    raise SystemExit(
+f"""usage: {cmd} <expression>      - pretty-print <expression>
+       {cmd} [-h | --help]     - show this help
+
+pprint - Pretty-print a Python object.
+Pass an expression to evaluate and pretty-print. \
+Any module names will be automatically imported.
+""")
+
+
+class _ArgumentResolver(ast.NodeTransformer):
+    def eval_ast(self, tree):
+        tree_fixed = ast.fix_missing_locations(tree)
+        code = compile(tree_fixed, "<string>", mode="eval")
+        val = eval(code, {"import_module": importlib.import_module}, {})
+        return val
+
+    def make_call(self, module_name):
+        return ast.Call(
+                ast.Name("import_module", ast.Load()),
+                [ast.Constant(module_name)],
+                []
+            )
+
+    def valid_call(self, call):
+        try:
+            self.eval_ast(ast.Expression(call))
+        except ImportError:
+            return False
+        else:
+            return True
+
+    def visit_Name(self, node):
+        try:
+            eval(node.id, {}, {})
+        except NameError:
+            call = self.make_call(node.id)
+            if not self.valid_call(call):
+                raise SystemExit(f"pprint: '{node.id}' was neither found as "
+                        f"a variable nor as a module.")
+            else:
+                return call
+        else:
+            return node
+
+    def visit_Attribute(self, node):
+        visited = self.visit(node.value)
+        if (
+              isinstance(node.value, (ast.Name, ast.Attribute))
+              and isinstance(visited, ast.Call)
+              and not hasattr(self.eval_ast(ast.Expression(visited)), node.attr)
+          ):
+            name = visited.args[0].value
+            call = self.make_call(name + "." + node.attr)
+            if not self.valid_call(call):
+                raise SystemExit(f"pprint: '{node.attr}' is neither an "
+                    f"attribute nor a submodule of module '{name}'")
+            else:
+                return call
+        else:
+            node.value = visited
+            return node
+
+def main():
+    args = _sys.argv[1:]
+    if args in ([], ["-h"], ["--help"]):
+        _usage()
+    string = " ".join(args)
+    try:
+        tree = ast.parse(string, mode="eval")
+    except SyntaxError as error:
+        raise SystemExit(f"pprint: not a valid expression ({error.msg}): "
+                f"{string}")
+    resolver = _ArgumentResolver()
+    final_tree = resolver.visit(tree)
+    try:
+        obj = resolver.eval_ast(final_tree)
+    except Exception as error:
+        raise SystemExit(f"pprint: error while evaluating expression: "
+                f"{str(error)}")
+    pprint(obj)
+
+
 if __name__ == "__main__":
-    _perfcheck()
+    main()

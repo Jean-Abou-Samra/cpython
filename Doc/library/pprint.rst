@@ -28,6 +28,18 @@ Dictionaries are sorted by key before the display is computed.
 .. versionchanged:: 3.9
    Added support for pretty-printing :class:`types.SimpleNamespace`.
 
+.. versionchanged:: 3.9
+   This module can be use in command line. It will pretty-print an arbitrary
+   object at the command line prompt, importing module names when necessary.
+   Examples include (replace ``python`` with your usual Python command)::
+
+python -m pprint sys.path
+python -m pprint "glob.glob('*.py')"
+python -m pprint os.path.supports_unicode_filenames
+python -m pprint "urllib.parse.urlparse('https://docs.python.org')._asdict()"
+
+
+
 The :mod:`pprint` module defines one class:
 
 .. First the implementation class:
