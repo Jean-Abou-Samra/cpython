@@ -29,7 +29,7 @@ Dictionaries are sorted by key before the display is computed.
    Added support for pretty-printing :class:`types.SimpleNamespace`.
 
 .. versionchanged:: 3.9
-   This module can be use in command line. It will pretty-print an arbitrary
+   This module can be used in command line. It will pretty-print an arbitrary
    object at the command line prompt, importing module names when necessary.
    Examples include (replace ``python`` with your usual Python command)::
 
